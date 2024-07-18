@@ -39,9 +39,10 @@ class BaseAthenaUDF:
         )
         record_batch_list = record_batch.to_pylist()
 
+        handler = getattr(cls, event["methodName"], cls.handle_athena_record)
         outputs = []
         for record in record_batch_list:
-            output = cls.handle_athena_record(
+            output = handler(
                 input_schema, output_schema, list(record.values())
             )
             outputs.append(output)

@@ -50,6 +50,12 @@ class TestDateUDF(BaseAthenaUDF):
         return arguments[0]
 
 
+class TestVariableUDF(BaseAthenaUDF):
+    @staticmethod
+    def upper(input_schema, output_schema, arguments):
+        return arguments[0].upper()
+
+
 def test_ping_request():
     ping_request = {
         "@type": "PingRequest",
@@ -216,3 +222,37 @@ def test_datetime():
     )
     record_batch_list = [x["0"] for x in record_batch.to_pylist()]
     assert record_batch_list == [date1, date2]
+
+
+def test_variable_udf():
+    request = copy.copy(REQUEST_TEMPLATE)
+    schema = pa.schema([("0", pa.string())])
+    request["inputRecords"]["schema"] = base64.b64encode(schema.serialize())
+    request["outputSchema"]["schema"] = base64.b64encode(schema.serialize())
+
+    inputs = ["foo", "bar"]
+    records = base64.b64encode(
+        pa.RecordBatch.from_arrays([inputs], schema=schema).serialize()
+    ).decode()
+    request["inputRecords"]["records"] = records
+
+    request["methodName"] = "upper"
+    test_udf = TestVariableUDF()
+    test_udf.handle_ping = Mock()
+    test_udf.handle_athena_record = Mock()
+    resp = test_udf.lambda_handler(request, None)
+    test_udf.handle_ping.assert_not_called()
+    test_udf.handle_athena_record.assert_not_called()
+    uuid.UUID(resp["records"]["aId"])
+
+    assert resp["methodName"] == "upper"
+    assert resp["@type"] == "UserDefinedFunctionResponse"
+    output_schema = pa.ipc.read_schema(
+        pa.BufferReader(base64.b64decode(resp["records"]["schema"]))
+    )
+    record_batch = pa.ipc.read_record_batch(
+        pa.BufferReader(base64.b64decode(resp["records"]["records"])),
+        output_schema,
+    )
+    record_batch_list = [x["0"] for x in record_batch.to_pylist()]
+    assert record_batch_list == ["FOO", "BAR"]
