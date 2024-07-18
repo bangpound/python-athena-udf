@@ -4,6 +4,7 @@ import datetime
 import uuid
 from unittest.mock import ANY, Mock
 import pyarrow as pa
+import pytest
 
 from athena_udf import BaseAthenaUDF
 
@@ -256,3 +257,9 @@ def test_variable_udf():
     )
     record_batch_list = [x["0"] for x in record_batch.to_pylist()]
     assert record_batch_list == ["FOO", "BAR"]
+
+    request["methodName"] = "handle_athena_record"
+
+    with pytest.raises(NotImplementedError):
+        resp = test_udf.lambda_handler(request, None)
+
